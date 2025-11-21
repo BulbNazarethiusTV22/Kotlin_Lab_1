@@ -10,22 +10,29 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import kotlin.math.exp
+import kotlin.math.pow
+import kotlin.math.sqrt
+import kotlin.math.roundToInt
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { FuelCalculatorScreen() }
+        setContent { EnergyCalculatorScreen() }
     }
 }
 
 @Composable
-fun FuelCalculatorScreen() {
+fun EnergyCalculatorScreen() {
     val scrollState = rememberScrollState()
 
-    var coalB by remember { mutableStateOf("") }
-    var oilB by remember { mutableStateOf("") }
-    var gasB by remember { mutableStateOf("") }
+
+    var Pc by remember { mutableStateOf("") }
+    var sigma by remember { mutableStateOf("") }
+    var price by remember { mutableStateOf("") }
+    var penalty by remember { mutableStateOf("") }
     var result by remember { mutableStateOf("") }
+
 
     Column(
         modifier = Modifier
@@ -33,52 +40,61 @@ fun FuelCalculatorScreen() {
             .padding(16.dp)
             .verticalScroll(scrollState)
     ) {
-        Text("Введіть значення В (витрат палива):", style = MaterialTheme.typography.titleLarge)
+        Text("Введення даних для розрахунку:", style = MaterialTheme.typography.titleLarge)
+
 
         OutlinedTextField(
-            value = coalB,
-            onValueChange = { coalB = it },
-            label = { Text("Вугілля (Ввуг)") },
+            value = Pc,
+            onValueChange = { Pc = it },
+            label = { Text("Середньодобова потужність, Pc (МВт)") },
             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
         )
+
+
         OutlinedTextField(
-            value = oilB,
-            onValueChange = { oilB = it },
-            label = { Text("Мазут (Вмаз)") },
+            value = sigma,
+            onValueChange = { sigma = it },
+            label = { Text("Середньоквадратичне відхилення, σ") },
             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
         )
+
+
         OutlinedTextField(
-            value = gasB,
-            onValueChange = { gasB = it },
-            label = { Text("Газ (Вгаз)") },
+            value = price,
+            onValueChange = { price = it },
+            label = { Text("Ціна за МВт·год, B (тис. грн)") },
             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
         )
 
         Spacer(Modifier.height(12.dp))
 
+
         Button(onClick = {
             try {
-                val coal = coalB.toDouble()
-                val oil = oilB.toDouble()
+                val PcVal = Pc.toDouble()
+                val sigmaVal = sigma.toDouble()
+                val B = price.toDouble()
 
-                val coalE = 150 * coal * 20.47 / 1000000
-                val oilE = 0.57 * oil * 39.48 / 1000000
-                var total = oilE + coalE
+
+                val deltaW1 = erfNormalized(PcVal, sigmaVal)
+
+
+                val W1 = PcVal * 24 * deltaW1
+                val W2 = PcVal * 24 * (1 - deltaW1)
+                val P1 = W1 * B
+                val SH1 = W2 * B
+
 
                 result = """
-                    🔥 Валовий викид при спалюванні вугілля:
-                    ${"%.2f".format(coalE)} т;
-                    
-                    🔥 Валовий викид при спалюванні мазуту:
-                    ${"%.2f".format(oilE)} т;
-                    
-                    При спалюванні природного газу тверді частинки відсутні;
-                    
-                    🔥 Сумарний валовий викид при спалюванні усіх видів палива:
-                    ${"%.2f".format(total)} т.
+                    δW1 = ${"%.4f".format(deltaW1)}
+                    W1 = ${"%.2f".format(W1)} МВт·год
+                    W2 = ${"%.2f".format(W2)} МВт·год
+                    Прибуток = ${"%.2f".format(P1)} тис. грн
+                    Штраф = ${"%.2f".format(SH1)} тис. грн
+                    Чистий прибуток = ${"%.2f".format(P1 - SH1)} тис. грн
                 """.trimIndent()
             } catch (e: Exception) {
-                result = "❗ Перевірь правильність введення чисел"
+                result = "Помилка у введенні даних"
             }
         }) {
             Text("Розрахувати")
@@ -87,4 +103,18 @@ fun FuelCalculatorScreen() {
         Spacer(Modifier.height(12.dp))
         Text(result)
     }
+}
+
+fun erfNormalized(mean: Double, sigma: Double): Double {
+    val a = mean - (mean * 0.05)
+    val b = mean + (mean * 0.05)
+    val n = 1000
+    val dx = (b - a) / n
+    var sum = 0.0
+    for (i in 0 until n) {
+        val x = a + i * dx
+        val fx = (1 / (sigma * sqrt(2 * Math.PI))) * exp(-((x - mean).pow(2)) / (2 * sigma.pow(2)))
+        sum += fx * dx
+    }
+    return (sum * 100).roundToInt() / 100.0
 }
